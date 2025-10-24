@@ -3,10 +3,121 @@ import puppeteer from "puppeteer";
 
 const app = express();
 
+const CONSTANTS = {
+  potD: {
+    url: "https://www.poetryfoundation.org/",
+    titleSelector:
+      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div:nth-child(1) > h3 > div > a > span",
+    descriptionSelector:
+      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-kappa.text-gray-600",
+    audioSelector:
+      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-xi.flex.flex-wrap.gap-2.leading-\\[\\.8\\].text-black > div > div > audio",
+    listenLinkSelector:
+      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-xi.flex.flex-wrap.gap-2.leading-\\[\\.8\\].text-black > button > span",
+  },
+  audioPoTD: {
+    url: "https://www.poetryfoundation.org/podcasts/series/74634/audio-pod",
+    titleSelector:
+      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > h1 > p",
+    descriptionSelector:
+      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.flex.flex-col.gap-4.sm\\:flex-row > div > div.copy-large.undefined.rich-text > p",
+    dateSelector:
+      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > time",
+    audioSelector:
+      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.mb-6.grid.gap-6 > div > div > audio",
+  },
+};
+
+const getPoemOfTheDayAudio = async (page) => {
+  await page.goto(
+    CONSTANTS.potD.url,
+    { waitUntil: "networkidle2", timeout: 5000 } // Wait for network to settle
+  );
+
+  // Check if listen link exists
+  await page.waitForSelector(CONSTANTS.potD.listenLinkSelector, {
+    timeout: 2000,
+  });
+  const listenLinkExists =
+    (await page.$(CONSTANTS.potD.listenLinkSelector)) !== null;
+
+  if (!listenLinkExists) {
+    console.log("Listen link does not exist for Poem of the Day.");
+    return { audioSrc: null };
+  }
+
+  // Get the poem title
+  const title = await page.$eval(
+    CONSTANTS.potD.titleSelector,
+    (el) => el.textContent
+  );
+
+  // Get the description
+  const description = await page.$eval(
+    CONSTANTS.potD.descriptionSelector,
+    (el) => el.textContent
+  );
+
+  console.log(`Poem of the Day found: ${title} ${description}`);
+
+  // Click the element to reveal content
+  await page.click(CONSTANTS.potD.listenLinkSelector);
+
+  // Wait and get audio
+  await page.waitForSelector(CONSTANTS.potD.audioSelector, { timeout: 5000 });
+  const audioSrc = await page.$eval(
+    CONSTANTS.potD.audioSelector,
+    (el) => el.src
+  );
+
+  return { title, description, audioSrc };
+};
+
+const getAudioPoemOfTheDayAudio = async (page) => {
+  await page.goto(
+    CONSTANTS.audioPoTD.url,
+    { waitUntil: "networkidle2", timeout: 5000 } // Wait for network to settle
+  );
+
+  // Get the poem title
+  const title = await page.$eval(
+    CONSTANTS.audioPoTD.titleSelector,
+    (el) => el.textContent
+  );
+
+  // Get the description
+  const description = await page.$eval(
+    CONSTANTS.audioPoTD.descriptionSelector,
+    (el) => el.textContent
+  );
+
+  // Get the page's date
+  const date = await page.$eval(
+    CONSTANTS.audioPoTD.dateSelector,
+    (el) => el.textContent
+  );
+
+  // Get the audio source URL
+  const audioSrc = await page.$eval(
+    CONSTANTS.audioPoTD.audioSelector,
+    (el) => el.src
+  );
+
+  console.log(`Audio Poem of the Day found: ${title} ${description}`);
+
+  return {
+    title,
+    description,
+    audioSrc,
+    date,
+  };
+};
+
 app.get("/api/poetry-episode", async (req, res) => {
+  let browser;
   try {
     console.log("Launching browser...");
-    const browser = await puppeteer.launch({
+    browser = await puppeteer.launch({
       headless: true,
       args: [
         "--no-sandbox",
@@ -17,46 +128,34 @@ app.get("/api/poetry-episode", async (req, res) => {
 
     const page = await browser.newPage();
 
-    await page.goto(
-      "https://www.poetryfoundation.org/podcasts/series/74634/audio-pod",
-      { waitUntil: "networkidle2", timeout: 5000 } // Wait for network to settle
-    );
+    const poemOfTheDay = await getPoemOfTheDayAudio(page);
+    const audioPoemOfTheDay = await getAudioPoemOfTheDayAudio(page);
 
-    // Get the poem title
-    const title = await page.$eval(
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > h1 > p",
-      (el) => el.textContent
-    );
+    if (!poemOfTheDay.audioSrc && !audioPoemOfTheDay.audioSrc) {
+      res.status(404).json({ error: "No audio poems found" });
+      return;
+    }
 
-    // Get the description
-    const description = await page.$eval(
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.flex.flex-col.gap-4.sm\\:flex-row > div > div.copy-large.undefined.rich-text > p",
-      (el) => el.textContent
-    );
+    const response = {};
 
-    // Get the page's date
-    const date = await page.$eval(
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > time",
-      (el) => el.textContent
-    );
+    if (poemOfTheDay.audioSrc) {
+      response.poemOfTheDay = poemOfTheDay;
+    }
 
-    // Get the audio source URL
-    const audioSrc = await page.$eval(
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.mb-6.grid.gap-6 > div > div > audio",
-      (el) => el.src
-    );
+    if (audioPoemOfTheDay.audioSrc) {
+      response.audioPoemOfTheDay = audioPoemOfTheDay;
+    }
 
-    await browser.close();
-
-    res.json({
-      title,
-      description,
-      audioSrc,
-      date,
-    });
+    res.json(response);
     console.log("Done!");
   } catch (error) {
     console.error("Error:", error.message);
+    res.status(500).json({ error: "Failed to fetch poetry data" });
+  } finally {
+    // Close the browser if it was opened
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 

@@ -26,4 +26,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/poetry-api:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/poetry-api:0.0.2
+            ${{ secrets.DOCKERHUB_USERNAME }}/poetry-api:1.0.1
