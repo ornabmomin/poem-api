@@ -28,4 +28,4 @@ jobs:
           context: .
           push: true
           target: ${{ matrix.variant }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/poetry-api:${{ matrix.variant }}-1.0.1
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/poetry-api:${{ matrix.variant }}-1.0.2

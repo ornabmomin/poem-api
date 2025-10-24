@@ -122,6 +122,8 @@ app.get("/api/poetry-episode", async (req, res) => {
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
         "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       ],
     });
