@@ -1,9 +1,9 @@
-FROM node:18
+FROM ghcr.io/puppeteer/puppeteer:24.26.1
 
 WORKDIR /app
 
 COPY package.json .
-RUN npm install express puppeteer
+RUN npm install
 
 COPY server.js .
 
