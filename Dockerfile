@@ -7,7 +7,8 @@ RUN apk add --no-cache \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+    dumb-init
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
@@ -23,6 +24,7 @@ RUN addgroup -g 1001 -S nodejs && \
 USER nodejs
 
 EXPOSE 3000
+ENTRYPOINT [ "/usr/bin/dumb-init", "--" ]
 CMD ["node", "server.js"]
 
 # Target 2: Official Puppeteer (stable)

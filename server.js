@@ -3,9 +3,7 @@ import puppeteer from "puppeteer";
 
 const app = express();
 
-const getPageElement = async (page, selector, contentType = "textContent") => {
-  return await page.$eval(selector, (el) => el[contentType]).catch(() => null);
-};
+let browserInstance = null;
 
 const CONSTANTS = {
   potD: {
@@ -30,6 +28,23 @@ const CONSTANTS = {
     audioSelector:
       "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.mb-6.grid.gap-6 > div > div > audio",
   },
+};
+
+const handleCloseBrowser = async (browser) => {
+  if (!browser) return;
+
+  try {
+    const pages = await browser.pages();
+    await Promise.all(pages.map((page) => page.close()));
+
+    await browser.close();
+  } catch (error) {
+    console.error("Error closing browser:", error.message);
+
+    if (browser.process()) {
+      browser.process().kill("SIGKILL");
+    }
+  }
 };
 
 const getPoemOfTheDayAudio = async (page) => {
@@ -120,6 +135,8 @@ app.get("/api/poetry-episode", async (req, res) => {
       ],
     });
 
+    browserInstance = browser;
+
     const page = await browser.newPage();
 
     const poemOfTheDay = await getPoemOfTheDayAudio(page);
@@ -146,11 +163,21 @@ app.get("/api/poetry-episode", async (req, res) => {
     console.error("Error:", error.message);
     res.status(500).json({ error: "Failed to fetch poetry data" });
   } finally {
-    // Close the browser if it was opened
-    if (browser) {
-      await browser.close();
-    }
+    await handleCloseBrowser(browser);
+    browserInstance = null;
   }
 });
+
+const shutDown = async (signal) => {
+  console.log(`Received ${signal}. Closing browser...`);
+  if (browserInstance) {
+    await handleCloseBrowser(browserInstance);
+    console.log("Browser closed.");
+  }
+  process.exit(0);
+};
+
+process.on("SIGINT", () => shutDown("SIGINT"));
+process.on("SIGTERM", () => shutDown("SIGTERM"));
 
 app.listen(3000, "0.0.0.0", () => console.log("API running on port 3000"));
