@@ -3,6 +3,10 @@ import puppeteer from "puppeteer";
 
 const app = express();
 
+const getPageElement = async (page, selector, contentType = "textContent") => {
+  return await page.$eval(selector, (el) => el[contentType]).catch(() => null);
+};
+
 const CONSTANTS = {
   potD: {
     url: "https://www.poetryfoundation.org/",
@@ -29,46 +33,34 @@ const CONSTANTS = {
 };
 
 const getPoemOfTheDayAudio = async (page) => {
-  await page.goto(
-    CONSTANTS.potD.url,
-    { waitUntil: "networkidle2", timeout: 5000 } // Wait for network to settle
-  );
-
-  // Check if listen link exists
-  await page.waitForSelector(CONSTANTS.potD.listenLinkSelector, {
-    timeout: 2000,
+  await page.goto(CONSTANTS.potD.url, {
+    waitUntil: "networkidle2",
+    timeout: 5000,
   });
-  const listenLinkExists =
-    (await page.$(CONSTANTS.potD.listenLinkSelector)) !== null;
 
-  if (!listenLinkExists) {
+  const title = await page
+    .$eval(CONSTANTS.potD.titleSelector, (el) => el.textContent?.trim())
+    .catch(() => null);
+
+  const description = await page
+    .$eval(CONSTANTS.potD.descriptionSelector, (el) => el.textContent?.trim())
+    .catch(() => null);
+
+  const listenButton = await page.$(CONSTANTS.potD.listenLinkSelector);
+
+  if (!listenButton) {
     console.log("Listen link does not exist for Poem of the Day.");
-    return { audioSrc: null };
+    return { title, description, audioSrc: null };
   }
 
-  // Get the poem title
-  const title = await page.$eval(
-    CONSTANTS.potD.titleSelector,
-    (el) => el.textContent
-  );
+  await listenButton.click();
+  const audioElement = await page
+    .waitForSelector(CONSTANTS.potD.audioSelector, { timeout: 5000 })
+    .catch(() => null);
 
-  // Get the description
-  const description = await page.$eval(
-    CONSTANTS.potD.descriptionSelector,
-    (el) => el.textContent
-  );
-
-  console.log(`Poem of the Day found: ${title} ${description}`);
-
-  // Click the element to reveal content
-  await page.click(CONSTANTS.potD.listenLinkSelector);
-
-  // Wait and get audio
-  await page.waitForSelector(CONSTANTS.potD.audioSelector, { timeout: 5000 });
-  const audioSrc = await page.$eval(
-    CONSTANTS.potD.audioSelector,
-    (el) => el.src
-  );
+  const audioSrc = audioElement
+    ? await page.$eval(CONSTANTS.potD.audioSelector, (el) => el.src)
+    : null;
 
   return { title, description, audioSrc };
 };
