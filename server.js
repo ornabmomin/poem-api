@@ -77,7 +77,7 @@ const getPoemOfTheDayAudio = async (page) => {
     ? await page.$eval(CONSTANTS.potD.audioSelector, (el) => el.src)
     : null;
 
-  return { title, description, audioSrc };
+  return { type: "Poem of the Day", title, description, audioSrc };
 };
 
 const getAudioPoemOfTheDayAudio = async (page) => {
@@ -93,10 +93,11 @@ const getAudioPoemOfTheDayAudio = async (page) => {
   );
 
   // Get the description
-  const description = await page.$eval(
-    CONSTANTS.audioPoTD.descriptionSelector,
-    (el) => el.textContent
-  );
+  const description = await page
+    .$eval(CONSTANTS.audioPoTD.descriptionSelector, (el) =>
+      el.textContent?.trim()
+    )
+    .catch(() => null);
 
   // Get the page's date
   const date = await page.$eval(
@@ -113,6 +114,7 @@ const getAudioPoemOfTheDayAudio = async (page) => {
   console.log(`Audio Poem of the Day found: ${title} ${description}`);
 
   return {
+    type: "Audio Poem of the Day",
     title,
     description,
     audioSrc,
@@ -147,14 +149,14 @@ app.get("/api/poetry-episode", async (req, res) => {
       return;
     }
 
-    const response = {};
+    const response = [];
 
     if (poemOfTheDay.audioSrc) {
-      response.poemOfTheDay = poemOfTheDay;
+      response.push(poemOfTheDay);
     }
 
     if (audioPoemOfTheDay.audioSrc) {
-      response.audioPoemOfTheDay = audioPoemOfTheDay;
+      response.push(audioPoemOfTheDay);
     }
 
     res.json(response);
