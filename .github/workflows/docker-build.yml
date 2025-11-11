@@ -32,4 +32,4 @@ jobs:
           context: .
           push: true
           target: ${{ matrix.variant }}
-          tags: ghcr.io/${{ github.actor }}/poem-api:${{ matrix.variant }}-${{ github.event.release.tag_name }}
+          tags: ghcr.io/${{ github.actor }}/poem-api:${{ github.event.release.tag_name }}
