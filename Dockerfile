@@ -17,6 +17,7 @@ WORKDIR /app
 COPY package.json .
 RUN npm install
 COPY server.js .
+COPY src ./src
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
@@ -34,6 +35,7 @@ WORKDIR /app
 COPY package.json .
 RUN npm install
 COPY server.js .
+COPY src ./src
 
 EXPOSE 3000
 CMD ["node", "server.js"]

@@ -1,185 +1,114 @@
+/**
+ * Poetry API Server
+ * A web scraping API for fetching poetry content with audio from Poetry Foundation
+ */
+
 import express from "express";
-import puppeteer from "puppeteer";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
+import { config } from "./src/config/index.js";
+import { logger } from "./src/utils/logger.js";
+import { browserPool } from "./src/utils/browserPool.js";
+import {
+  errorHandler,
+  notFoundHandler,
+} from "./src/middleware/errorHandler.js";
+import { requestLogger } from "./src/middleware/requestLogger.js";
+import poetryRoutes from "./src/routes/poetry.js";
 
 const app = express();
 
-let browserInstance = null;
+// Security middleware
+app.use(helmet());
+app.use(cors());
 
-const CONSTANTS = {
-  potD: {
-    url: "https://www.poetryfoundation.org/",
-    titleSelector:
-      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div:nth-child(1) > h3 > div > a > span",
-    descriptionSelector:
-      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-kappa.text-gray-600",
-    audioSelector:
-      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-xi.flex.flex-wrap.gap-2.leading-\\[\\.8\\].text-black > div > div > audio",
-    listenLinkSelector:
-      "#mainContent > main > div > section.my-4.mb-7.border-t-4.border-gray-300.py-4 > div > div.col-span-full.flex.flex-col.md\\:col-span-3.md\\:gap-3 > div.type-xi.flex.flex-wrap.gap-2.leading-\\[\\.8\\].text-black > button > span",
-  },
-  audioPoTD: {
-    url: "https://www.poetryfoundation.org/podcasts/series/74634/audio-pod",
-    titleSelector:
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > h1 > p",
-    descriptionSelector:
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.flex.flex-col.gap-4.sm\\:flex-row > div > div.copy-large.undefined.rich-text > p",
-    dateSelector:
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > header > time",
-    audioSelector:
-      "#mainContent > article > div.flex.flex-col.gap-5.md\\:flex-row-reverse.md\\:gap-8 > div > div.mb-6.grid.gap-6 > div > div > audio",
-  },
-};
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.max,
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/", limiter);
 
-const handleCloseBrowser = async (browser) => {
-  if (!browser) return;
+// Body parsing middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  try {
-    const pages = await browser.pages();
-    await Promise.all(pages.map((page) => page.close()));
+// Request logging
+app.use(requestLogger);
 
-    await browser.close();
-  } catch (error) {
-    console.error("Error closing browser:", error.message);
+// Health check endpoint
+app.get("/health", (req, res) => {
+  const poolStats = browserPool.getStats();
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    browserPool: poolStats,
+    environment: config.server.nodeEnv,
+  });
+});
 
-    if (browser.process()) {
-      browser.process().kill("SIGKILL");
-    }
-  }
-};
+// API routes
+app.use("/api", poetryRoutes);
 
-const getPoemOfTheDayAudio = async (page) => {
-  await page.goto(CONSTANTS.potD.url, {
-    waitUntil: "networkidle2",
-    timeout: 5000,
+// 404 handler
+app.use(notFoundHandler);
+
+// Error handling middleware (must be last)
+app.use(errorHandler);
+
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+  // Stop accepting new requests
+  server.close(async () => {
+    logger.info("HTTP server closed");
+
+    // Shutdown browser pool
+    await browserPool.shutdown();
+
+    logger.info("Graceful shutdown complete");
+    process.exit(0);
   });
 
-  const title = await page
-    .$eval(CONSTANTS.potD.titleSelector, (el) => el.textContent?.trim())
-    .catch(() => null);
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 30000);
+}
 
-  const description = await page
-    .$eval(CONSTANTS.potD.descriptionSelector, (el) => el.textContent?.trim())
-    .catch(() => null);
-
-  const listenButton = await page.$(CONSTANTS.potD.listenLinkSelector);
-
-  if (!listenButton) {
-    console.log("Listen link does not exist for Poem of the Day.");
-    return { title, description, audioSrc: null };
-  }
-
-  await listenButton.click();
-  const audioElement = await page
-    .waitForSelector(CONSTANTS.potD.audioSelector, { timeout: 5000 })
-    .catch(() => null);
-
-  const audioSrc = audioElement
-    ? await page.$eval(CONSTANTS.potD.audioSelector, (el) => el.src)
-    : null;
-
-  return { type: "Poem of the Day", title, description, audioSrc };
-};
-
-const getAudioPoemOfTheDayAudio = async (page) => {
-  await page.goto(
-    CONSTANTS.audioPoTD.url,
-    { waitUntil: "networkidle2", timeout: 5000 } // Wait for network to settle
+// Start server
+const server = app.listen(config.server.port, config.server.host, async () => {
+  logger.info(
+    `API running on http://${config.server.host}:${config.server.port}`
   );
+  logger.info(`Environment: ${config.server.nodeEnv}`);
 
-  // Get the poem title
-  const title = await page.$eval(
-    CONSTANTS.audioPoTD.titleSelector,
-    (el) => el.textContent
-  );
-
-  // Get the description
-  const description = await page
-    .$eval(CONSTANTS.audioPoTD.descriptionSelector, (el) =>
-      el.textContent?.trim()
-    )
-    .catch(() => null);
-
-  // Get the page's date
-  const date = await page.$eval(
-    CONSTANTS.audioPoTD.dateSelector,
-    (el) => el.textContent
-  );
-
-  // Get the audio source URL
-  const audioSrc = await page.$eval(
-    CONSTANTS.audioPoTD.audioSelector,
-    (el) => el.src
-  );
-
-  console.log(`Audio Poem of the Day found: ${title} ${description}`);
-
-  return {
-    type: "Audio Poem of the Day",
-    title,
-    description,
-    audioSrc,
-    date,
-  };
-};
-
-app.get("/api/poetry-episode", async (req, res) => {
-  let browser;
+  // Initialize browser pool
   try {
-    console.log("Launching browser...");
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      ],
-    });
-
-    browserInstance = browser;
-
-    const page = await browser.newPage();
-
-    const poemOfTheDay = await getPoemOfTheDayAudio(page);
-    const audioPoemOfTheDay = await getAudioPoemOfTheDayAudio(page);
-
-    if (!poemOfTheDay.audioSrc && !audioPoemOfTheDay.audioSrc) {
-      res.status(404).json({ error: "No audio poems found" });
-      return;
-    }
-
-    const response = [];
-
-    if (poemOfTheDay.audioSrc) {
-      response.push(poemOfTheDay);
-    }
-
-    if (audioPoemOfTheDay.audioSrc) {
-      response.push(audioPoemOfTheDay);
-    }
-
-    res.json(response);
-    console.log("Done!");
+    await browserPool.initialize();
+    logger.info("Browser pool initialized successfully");
   } catch (error) {
-    console.error("Error:", error.message);
-    res.status(500).json({ error: "Failed to fetch poetry data" });
-  } finally {
-    await handleCloseBrowser(browser);
-    browserInstance = null;
+    logger.error("Failed to initialize browser pool:", error);
   }
 });
 
-const shutDown = async (signal) => {
-  console.log(`Received ${signal}. Closing browser...`);
-  if (browserInstance) {
-    await handleCloseBrowser(browserInstance);
-    console.log("Browser closed.");
-  }
-  process.exit(0);
-};
+// Handle shutdown signals
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
-process.on("SIGINT", () => shutDown("SIGINT"));
-process.on("SIGTERM", () => shutDown("SIGTERM"));
+// Handle uncaught errors
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught Exception:", error);
+  gracefulShutdown("uncaughtException");
+});
 
-app.listen(3000, "0.0.0.0", () => console.log("API running on port 3000"));
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled Rejection at:", { promise, reason });
+});
