@@ -1,21 +1,17 @@
 FROM node:25-alpine3.21 AS alpine
 
 RUN apk add --no-cache \
-    chromium \
     nss \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont \
     dumb-init
 
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    NODE_ENV=production
+ENV NODE_ENV=production
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund && npm prune --production && npm cache clean --force
 COPY server.js .
 COPY src ./src
 

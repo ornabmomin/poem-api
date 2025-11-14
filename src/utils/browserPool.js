@@ -4,6 +4,7 @@
  */
 
 import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { config } from "../config/index.js";
 import { logger } from "./logger.js";
 
@@ -46,15 +47,15 @@ class BrowserPool {
    * Create a new browser instance
    */
   async createBrowser() {
+    const executablePath =
+      config.puppeteer.executablePath || (await chromium.executablePath());
     const launchOptions = {
-      headless: config.puppeteer.headless,
-      args: config.puppeteer.args,
+      headless: "new",
+      args: [...config.puppeteer.args, ...chromium.args],
+      executablePath,
+      defaultViewport: chromium.defaultViewport,
+      ignoreHTTPSErrors: true,
     };
-
-    if (config.puppeteer.executablePath) {
-      launchOptions.executablePath = config.puppeteer.executablePath;
-    }
-
     const browser = await puppeteer.launch(launchOptions);
     browser._createdAt = Date.now();
     browser._lastUsed = Date.now();
