@@ -1,4 +1,3 @@
-# Target 1: Alpine (small)
 FROM node:25-alpine3.21 AS alpine
 
 RUN apk add --no-cache \
@@ -26,16 +25,4 @@ USER nodejs
 
 EXPOSE 3000
 ENTRYPOINT [ "/usr/bin/dumb-init", "--" ]
-CMD ["node", "server.js"]
-
-# Target 2: Official Puppeteer (stable)
-FROM ghcr.io/puppeteer/puppeteer:24.26.1 AS puppeteer
-
-WORKDIR /app
-COPY package.json .
-RUN npm install
-COPY server.js .
-COPY src ./src
-
-EXPOSE 3000
 CMD ["node", "server.js"]
