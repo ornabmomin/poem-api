@@ -3,7 +3,7 @@
  * Manages a pool of Puppeteer browser instances for efficient resource usage
  */
 
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
 import { config } from "../config/index.js";
 import { logger } from "./logger.js";
 
