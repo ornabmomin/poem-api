@@ -15,8 +15,8 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     NODE_ENV=production
 
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev --loglevel=verbose && npm cache clean --force
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 COPY server.js .
 COPY src ./src
 
