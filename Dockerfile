@@ -1,13 +1,18 @@
 FROM node:25-alpine3.21 AS alpine
 
 RUN apk add --no-cache \
+    chromium \
     nss \
     freetype \
     harfbuzz \
     ca-certificates \
-    dumb-init
+    ttf-freefont \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
 
-ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    NODE_ENV=production
 
 WORKDIR /app
 COPY package.json package-lock.json ./

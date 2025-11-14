@@ -48,10 +48,16 @@ class BrowserPool {
    */
   async createBrowser() {
     const executablePath =
-      config.puppeteer.executablePath || (await chromium.executablePath());
+      process.env.PUPPETEER_EXECUTABLE_PATH ||
+      config.puppeteer.executablePath ||
+      (await chromium.executablePath());
+
     const launchOptions = {
       headless: "new",
-      args: [...config.puppeteer.args, ...chromium.args],
+      args: [
+        ...config.puppeteer.args,
+        ...(process.env.PUPPETEER_EXECUTABLE_PATH ? [] : chromium.args),
+      ],
       executablePath,
       defaultViewport: chromium.defaultViewport,
       ignoreHTTPSErrors: true,
