@@ -22,7 +22,7 @@
     "puppeteer": "^24.26.1",
     "helmet": "^8.0.0",
     "cors": "^2.8.5",
-    "express-rate-limit": "^7.4.1"
+    "express-rate-limit": "^8.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
