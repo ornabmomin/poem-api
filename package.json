@@ -19,7 +19,7 @@
   "license": "ISC",
   "dependencies": {
     "express": "^5.0.0",
-    "puppeteer": "^24.26.1",
+    "puppeteer": "^25.0.0",
     "helmet": "^8.0.0",
     "cors": "^2.8.5",
     "express-rate-limit": "^8.0.0"
